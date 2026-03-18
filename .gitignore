@@ -1,0 +1,16 @@
+# ROS build files
+build/
+install/
+log/
+
+# Python cache
+*.pyc
+__pycache__/
+
+# OS generated files
+.DS_Store
+*.swp
+
+# Editor settings
+.vscode/
+.idea/
