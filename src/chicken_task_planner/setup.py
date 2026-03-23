@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-        ],
+        # '실행할_이름 = 패키지명.파일명:함수명'
+        'point_to_plan = chicken_task_planner.point_to_plan:main',
+    ],
     },
 )
