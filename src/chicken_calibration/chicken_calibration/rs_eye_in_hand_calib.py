@@ -19,7 +19,7 @@ class RealSenseCalibrator(Node):
         self.checkerboard_dims = (6, 9) 
         self.square_size = 0.02 # 20mm
         
-        # 2. 성아님의 이동 좌표 리스트 [x, y, z, qx, qy, qz, qw]
+        # 2. 이동 좌표 리스트 [x, y, z, qx, qy, qz, qw]
         self.test_points = [
             [-1017.48, -227.88, 1176.76, 82.99, 175.59, 67.19],
 [-966.30, -227.46, 1201.95, 89.88, 175.73, 73.48],
