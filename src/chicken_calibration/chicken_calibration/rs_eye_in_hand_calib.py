@@ -17,28 +17,27 @@ class RealSenseCalibrator(Node):
         
         # 1. 체커보드 설정 (실측 6x9 점)
         self.checkerboard_dims = (6, 9) 
-        self.square_size = 0.02 # 20mm
+        self.square_size = 0.03 # 30mm
         
-        # 2. 이동 좌표 리스트 [x, y, z, qx, qy, qz, qw]
-        self.test_points = [
-            [-1017.48, -227.88, 1176.76, 82.99, 175.59, 67.19],
-[-966.30, -227.46, 1201.95, 89.88, 175.73, 73.48],
-[-899.20, -161.46, 1234.03, 96.14, 175.85, 82.84],
-[-868.69, -124.79, 1211.79, 169.68, 166.93, 157.66],
-[-726.48, -147.49, 1281.67, 177.70, 162.50, 162.56],
-[-684.49, -277.57, 1208.33, 0.38, -167.84, -25.59],
-[-914.64, -142.32, 1046.52, 59.07, 174.20, 46.09],
-[-1009.81, -114.53, 1056.67, 19.95, 161.93, 10.19],
-[-1026.25, -231.55, 1082.00, 29.04, 165.05, 13.15],
-[-922.98, -300.00, 1209.56, 99.26, 161.83, 80.32],
-[-884.76, -482.86, 1129.83, 107.68, 142.78, 100.00],
-[-612.92, -136.78, 807.06, 164.47, 130.14, 129.23],
-[-737.58, 172.45, 791.50, 30.30, -122.59, -66.23],
-[-649.28, 107.18, 772.92, 34.34, -129.52, -72.51],
-[-708.22, -303.27, 1001.03, 150.32, 141.37, 129.79],
-[-1047.95, -122.91, 960.65, 1.19, 152.44, 12.26],
-[-1104.13, -137.69, 977.27, 178.19, -155.42, -171.47],
-[-1052.13, -333.69, 935.53, 42.27, 149.29, 43.94],
+        # 2. 이동 좌표 리스트 [x, y, z, rx, ry, rx]
+        self.test_points = [ 
+            [-519.51, -41.03, 1271.77, 12.21, -165.76, -83.57],
+[-475.89, -96.56, 1213.28, 142.01, 159.51, 37.89],
+[-371.31, -27.67, 1286.70, 147.46, 154.91, 51.11],
+[-767.34, -114.73, 1235.42, 38.25, 163.24, -59.51],
+[-745.51, 3.19, 1279.92, 23.08, 168.15, -66.61],
+[-659.41, 226.41, 1298.11, 98.30, -158.50, 21.30],
+[-560.84, 212.84, 1371.51, 79.56, -161.06, 3.98],
+[-520.48, 351.02, 1313.42, 72.34, -147.79, 7.54],
+[-602.59, 146.76, 1312.56, 91.33, -164.37, 10.98],
+[-660.06, -50.28, 1283.76, 171.40, -173.31, 75.71],
+[-591.60, 82.13, 1256.61, 41.49, -172.16, -50.60],
+[-419.24, 217.12, 1229.82, 46.37, -159.13, -25.76],
+[-459.39, -68.72, 1125.69, 149.37, 157.00, 36.99],
+[-358.83, -194.46, 1237.05, 146.53, 145.63, 32.03],
+[-381.71, -148.62, 1369.81, 169.74, 156.01, 134.23],
+[-444.60, -141.43, 1226.26, 166.50, 155.74, 131.51],
+[-328.08, -423.92, 1220.37, 144.52, 142.43, 77.21]
         ]
         self.current_pt_idx = 0
 
@@ -47,7 +46,7 @@ class RealSenseCalibrator(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
-        # 서비스 클라이언트를 미리 생성해둡니다 (수정됨)
+        # 서비스 클라이언트를 미리 생성
         self.move_cli = self.create_client(MoveLine, '/motion/move_line')
         
         self.R_gripper2base, self.t_gripper2base = [], []
@@ -65,7 +64,7 @@ class RealSenseCalibrator(Node):
         self.input_thread.start()
 
         self.get_logger().info("\n" + "="*50)
-        self.get_logger().info("🚀 RealSense Hand-Eye Calibration 시작")
+        self.get_logger().info("RealSense Hand-Eye Calibration 시작")
         self.get_logger().info("   'n': 다음 포인트로 이동 명령 전송")
         self.get_logger().info("   's': 현재 위치에서 샘플 저장 (격자 확인 후)")
         self.get_logger().info("   'q': 데이터 계산 및 프로그램 종료")
@@ -81,7 +80,7 @@ class RealSenseCalibrator(Node):
         self.dist = np.array(intr.coeffs)
 
     def image_loop(self):
-        """실시간 화면 출력 및 체커보드 선 그리기"""
+        """실시간 화면 출력 및 체커보드 위치 확인"""
         try:
             while rclpy.ok() and not self.stop_threads:
                 frames = self.pipeline.wait_for_frames()
@@ -106,9 +105,8 @@ class RealSenseCalibrator(Node):
             self.pipeline.stop()
 
     def move_next(self):
-        """수정된 부분: 모든 명령어가 함수 안으로 들여쓰기 됨"""
         if self.current_pt_idx >= len(self.test_points):
-            self.get_logger().warn("모든 포인트를 방문했습니다!")
+            self.get_logger().warn("완료")
             return
 
         # 서비스 대기 및 호출 로직이 함수 안으로 들어옴
@@ -127,7 +125,7 @@ class RealSenseCalibrator(Node):
         req.blend_type = 0
 
         self.move_cli.call_async(req)
-        self.get_logger().info(f"🚀 [{self.current_pt_idx + 1}] 로봇에게 직접 이동 명령 전달!")
+        self.get_logger().info(f"[{self.current_pt_idx + 1}] 로봇 move")
         self.current_pt_idx += 1
 
     def save_sample(self):
@@ -157,11 +155,11 @@ class RealSenseCalibrator(Node):
                 self.R_target2cam.append(R_tc)
                 self.t_target2cam.append(tvec)
                 
-                self.get_logger().info(f"📸 샘플 {len(self.R_gripper2base)} 저장 성공!")
+                self.get_logger().info(f"샘플 {len(self.R_gripper2base)} 저장 성공!")
             else:
-                self.get_logger().error("❌ 체커보드 인식 실패! 화면에 선이 다 나오는지 확인하세요.")
+                self.get_logger().error("체커보드 인식 실패! 화면에 선이 다 나오는지 확인하세요.")
         except Exception as e:
-            self.get_logger().error(f"❌ 데이터 저장 중 오류 발생: {e}")
+            self.get_logger().error(f"데이터 저장 중 오류 발생: {e}")
 
     def compute_calibration(self):
         if len(self.R_gripper2base) < 5:
