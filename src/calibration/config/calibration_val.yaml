@@ -1,0 +1,13 @@
+# camera_to_gripper.yaml
+calibration_data:
+  translation:
+    x: -0.04861006
+    y: 0.05671699
+    z: 0.16817704
+  quaternion:
+    x: 0.06996341
+    y: 0.01519766
+    z: 0.97633869
+    w: -0.20405127
+  frame_id: "link_6"
+  child_frame_id: "camera_link"

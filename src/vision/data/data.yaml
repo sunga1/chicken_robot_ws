@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['chicken']
+
+roboflow:
+  workspace: s-workspace-m6vlz
+  project: chicken_picking
+  version: 2
+  license: Private
+  url: https://app.roboflow.com/s-workspace-m6vlz/chicken_picking/2
