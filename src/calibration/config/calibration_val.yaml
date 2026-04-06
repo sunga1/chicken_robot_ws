@@ -1,4 +1,4 @@
-# camera_to_gripper.yaml
+# calibration_val.yaml
 calibration_data:
   translation:
     x: -0.04861006

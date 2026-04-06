@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+        'arm_controller = manipulation.arm_controller:main',
         ],
     },
 )

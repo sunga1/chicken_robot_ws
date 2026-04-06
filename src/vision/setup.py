@@ -24,7 +24,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'collect_data = vision.collect_data:main'
+            'collect_data = vision.collect_data:main',
+            # '실행할_이름 = 패키지명.파일이름:메인함수'
+            'chicken_detector = vision.chicken_detector:main',
         ],
     },
 )

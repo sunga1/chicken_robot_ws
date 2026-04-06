@@ -1,6 +1,8 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
-package_name = 'task_planner'
+package_name = 'bringup'
 
 setup(
     name=package_name,
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,9 +27,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-        # '실행할_이름 = 패키지명.파일명:함수명'
-        'point_to_plan = task_planner.point_to_plan:main',
-        'task_planner_node = task_planner.task_planner_node:main',
-    ],
+        ],
     },
 )

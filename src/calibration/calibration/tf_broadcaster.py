@@ -13,7 +13,7 @@ class CalibTFBr(Node):
         self.publish_static_tf()
 
     def publish_static_tf(self):
-        config_path = os.path.expanduser('~/chicken_robot_ws/src/chicken_calibration/config/calibration_val.yaml')
+        config_path = os.path.expanduser('~/chicken_robot_ws/src/calibration/config/calibration_val.yaml')
         
         if not os.path.exists(config_path):
             self.get_logger().error(f"설정 파일을 찾을 수 없음: {config_path}")
