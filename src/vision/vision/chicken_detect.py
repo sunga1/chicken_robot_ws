@@ -7,7 +7,7 @@ import cv2
 import os
 from tf2_ros import Buffer, TransformListener
 from scipy.spatial.transform import Rotation as R
-from dsr_msgs2.srv import MoveLine, MoveStop, SetCtrlIO # IO 서비스 추가
+from dsr_msgs2.srv import MoveLine, MoveStop
 from ultralytics import YOLO
 
 class ChickenChaser(Node):
@@ -25,19 +25,15 @@ class ChickenChaser(Node):
         model_path = os.path.join(home_dir, 'Downloads', 'best.pt')
         self.model = YOLO(model_path)
 
-        # 3. 제어 변수
+        # 3. 각도 안정화용 변수
         self.angle_buffer = [] 
-        self.fixed_angle = 0.0
-        self.gripper_pin = 1 # 온로봇 그리퍼가 연결된 IO 핀 번호 (확인 필요)
+        self.fixed_angle = 0.0  # m을 누를 때 고정될 각도
         
-        # ROS 서비스 클라이언트
+        # ROS & Camera 설정
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.move_cli = self.create_client(MoveLine, '/motion/move_line')
         self.stop_cli = self.create_client(MoveStop, '/motion/move_stop')
-        self.io_cli = self.create_client(SetCtrlIO, '/io/set_digital_output') # IO 클라이언트
-
-        # 카메라 설정
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
@@ -46,28 +42,28 @@ class ChickenChaser(Node):
         self.intr = self.profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
 
         self.create_timer(0.1, self.main_loop)
-        self.get_logger().info("OnRobot Ready. [g]: Open, [h]: Close, [m]: Aim, [o]: Pick")
-
-    def set_gripper(self, state):
-        """그리퍼 열기(0) / 닫기(1) 제어"""
-        if not self.io_cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().error("IO 서비스를 찾을 수 없습니다!")
-            return
-        req = SetCtrlIO.Request()
-        req.port = self.gripper_pin
-        req.value = 1 if state else 0 # 1은 닫기(ON), 0은 열기(OFF)
-        self.io_cli.call_async(req)
-        self.get_logger().info(f"Gripper {'Close' if state else 'Open'} 전송")
+        self.get_logger().info("Wide-Grip Mode. [m]: 고정 및 이동, [o]: 하강")
 
     def get_stable_angle(self, mask_coords):
+        """치킨의 장축(가장 긴 부분)을 계산하고 안정화함"""
         rect = cv2.minAreaRect(mask_coords)
         raw_angle = rect[2]
         width, height = rect[1]
-        # 장축 기준 정규화 및 90도 보정
-        angle = raw_angle + (180.0 if width < height else 90.0) + 90.0
+
+        # 항상 긴 쪽을 기준으로 각도 정규화
+        if width < height:
+            angle = raw_angle + 180.0
+        else:
+            angle = raw_angle + 90.0
+            
+        # 성아님 요청: 그리퍼 방향 90도 추가 보정
+        angle += 90.0
         
+        # 이동 평균 필터 (최근 10프레임)
         self.angle_buffer.append(angle)
-        if len(self.angle_buffer) > 10: self.angle_buffer.pop(0)
+        if len(self.angle_buffer) > 10:
+            self.angle_buffer.pop(0)
+        
         return np.mean(self.angle_buffer)
 
     def main_loop(self):
@@ -84,17 +80,24 @@ class ChickenChaser(Node):
             robot_z_mm = cur_t[2] * 1000.0
 
             results = self.model.predict(img, conf=0.5, verbose=False)
-            b_point, current_view_angle, target_pick_z = None, 0.0, 0.0
+            b_point = None
+            current_view_angle = 0.0
+            target_pick_z = 0.0
 
             for r in results:
                 if r.masks is not None and len(r.masks.xy) > 0:
                     mask_coords = r.masks.xy[0].astype(np.int32)
                     cv2.polylines(img, [mask_coords], True, (0, 255, 0), 2)
+                    
+                    # 실시간 계산되는 안정화된 각도
                     current_view_angle = self.get_stable_angle(mask_coords)
                     
+                    # 중심점 및 좌표 계산
                     M = cv2.moments(mask_coords)
                     if M['m00'] != 0:
-                        u_pix, v_pix = int(M['m10']/M['m00']), int(M['m01']/M['m00'])
+                        u_pix = int(M['m10']/M['m00'])
+                        v_pix = int(M['m01']/M['m00'])
+                        
                         dist = depth_frame.get_distance(u_pix, v_pix)
                         if dist > 0:
                             c_point = rs.rs2_deproject_pixel_to_point(self.intr, [u_pix, v_pix], dist)
@@ -102,29 +105,34 @@ class ChickenChaser(Node):
                                                 trans.transform.rotation.z, trans.transform.rotation.w]).as_matrix()
                             g_point = self.R_c2g @ np.array(c_point) + self.t_c2g
                             b_point = cur_R @ g_point + cur_t
-                            b_point[1] += 0.02
+                            
+                            b_point[1] += 0.02 # 오프셋
                             target_pick_z = (b_point[2] * 1000.0) + self.gripper_offset + 10.0
 
+                            # 화면 표시
                             cv2.circle(img, (u_pix, v_pix), 5, (0, 0, 255), -1)
+                            cv2.putText(img, f"Real-time: {current_view_angle:.1f}", (10, 30), 0, 0.7, (255, 255, 255), 2)
                             cv2.putText(img, f"FIXED: {self.fixed_angle:.1f}", (10, 60), 0, 0.7, (0, 255, 255), 2)
 
             key = cv2.waitKey(1) & 0xFF
-            # --- 그리퍼 수동 제어 ---
-            if key == ord('g'): self.set_gripper(False) # Open
-            elif key == ord('h'): self.set_gripper(True) # Close
-            
-            # --- 로봇 이동 제어 ---
-            elif key == ord('m') and b_point is not None:
+            if key == ord('m') and b_point is not None:
+                # [핵심] m을 누르는 순간의 각도를 고정함
                 self.fixed_angle = current_view_angle
-                self.send_move_command([b_point[0]*1000.0, b_point[1]*1000.0, robot_z_mm], self.fixed_angle)
+                target_mm = [b_point[0]*1000.0, b_point[1]*1000.0, robot_z_mm]
+                self.send_move_command(target_mm, self.fixed_angle)
+                self.get_logger().info(f"각도 고정 및 이동: {self.fixed_angle:.1f}")
+
             elif key == ord('o') and b_point is not None:
-                self.send_move_command([cur_t[0]*1000.0, cur_t[1]*1000.0, target_pick_z], self.fixed_angle)
+                # 고정된 각도를 유지하며 하강
+                target_mm = [cur_t[0]*1000.0, cur_t[1]*1000.0, target_pick_z]
+                self.send_move_command(target_mm, self.fixed_angle)
+
             elif key == ord('u'):
                 self.send_move_command([cur_t[0]*1000.0, cur_t[1]*1000.0, robot_z_mm + 100.0], 0.0)
             elif key == ord('s'): self.send_stop_command()
             elif key == ord('q'): rclpy.shutdown()
 
-            cv2.imshow("Stable Chicken Chaser & OnRobot", img)
+            cv2.imshow("Stable Chicken Chaser", img)
         except Exception: pass
 
     def send_move_command(self, pos_mm, rz_deg):
