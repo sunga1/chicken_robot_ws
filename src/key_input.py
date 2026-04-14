@@ -8,7 +8,7 @@ class KeyInput(Node):
         super().__init__('key_input')
         self.pub = self.create_publisher(Bool, '/robot/confirm', 10)
 
-        # 🔥 input은 별도 thread로
+        # input은 별도 thread로
         thread = threading.Thread(target=self.input_loop, daemon=True)
         thread.start()
 

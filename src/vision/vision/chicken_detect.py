@@ -23,7 +23,7 @@ class ChickenChaser(Node):
         # 2. 모델 로드
         home_dir = os.path.expanduser('~')
         model_path = os.path.join(home_dir, 'Downloads', 'best.pt')
-        self.model = YOLO(model_path)
+        self.model = YOLO('/home/sunga/chicken_robot_ws/src/vision/models/best.pt')
 
         # 3. 각도 안정화용 변수
         self.angle_buffer = [] 
